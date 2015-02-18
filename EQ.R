@@ -16,7 +16,7 @@ mdims   <- c(nyear,nages,narea)
 # From Carruthers paper
 x       <- runif(narea);    # area of each region
 parea   <- x/sum(x);        # relative area of each region (gravity weight)
-omega   <- 1.4              # residency parameter.
+omega   <- 0.4              # residency parameter.
 
 
 # GRAVITY MODEL
@@ -40,15 +40,14 @@ for (i in 1:nyear)
 {
     for (j in 1:nages)
     {
-        S          = diag(exp(-m-fk*sel[j,]))
+        if( i == 5 ) fm = c(1,1,1,5) else fm = rep(1,narea)
+        S          = diag(exp(-m-fm*fk*sel[j,]))
         AGS[i,j,,] = G %*% S
     }
 }
 
 
 # POPULATION MODEL
-S       <- diag(exp(-m),narea)      # Survival diagonal matrix
-# A       <- G %*% S
 rj      <- exp(rnorm(narea))        # Average recruitment to area k
 Nijk    <- array(0,mdims)
 
@@ -70,6 +69,7 @@ for (j in 1:nages)
         Nijk[i,j,] = -solve(AGS[i,j,,]-I,Nijk[i,j,])
     }
 }
+
 # update state variables
 for (i in 1:nyear) 
 {
@@ -99,6 +99,6 @@ mk      <- rpois(narea,100)
 
 # MARKS RECAPTURED AT t=1
 # Rk is a matrix Rk[release_area,recapture_area]
-pk      <- fk * A                   # Capture probability post movement-survival
+pk      <- fk * AGS[1,1,,] # Capture probability post movement-survival
 Rk      <- apply(pk,1,function(x) rbinom(narea,size=mk,prob=x))
 
