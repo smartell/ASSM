@@ -11,6 +11,7 @@ set.seed(1)
 narea   <- 4
 nages   <- 8
 nyear   <- 20
+nseas   <- 4
 mdims   <- c(nyear,nages,narea)
 
 # From Carruthers paper
