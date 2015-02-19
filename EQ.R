@@ -17,7 +17,7 @@ mdims   <- c(nyear,nseas,nages,narea)
 # From Carruthers paper
 x       <- runif(narea);    # area of each region
 parea   <- x/sum(x);        # relative area of each region (gravity weight)
-omega   <- 0.4              # residency parameter.
+omega   <- 1.4              # residency parameter.
 
 # SEASONALITY TO MOVEMENT MATRIX
 h  = runif(narea)*7 # peak gravity weight.
@@ -39,15 +39,12 @@ for (ii in 1:nseas)
     G[ii,,] <- matrix(gw[ii,],narea,narea,byrow=TRUE)
     diag(G[ii,,]) <- diag(G[ii,,]) + omega
     G[ii,,]  <- exp(G[ii,,])/rowSums(exp(G[ii,,]))
-
-    G[ii,,]  <- 0
-    diag(G[ii,,]) <- 1
 }
 
 
 
 # FISHING MORTALITY & SELECTIVITY
-fk      <- 0*rgamma(narea,3.5,40)     # Capture probability in area k
+fk      <- rgamma(narea,3.5,40)     # Capture probability in area k
 ah      <- rnorm(narea,nages/2)
 sel     <- sapply(ah,function(x) plogis(1:nages,x))
 
@@ -62,7 +59,7 @@ for (i in 1:nyear)
     {
         for (j in 1:nages)
         {
-            if( i == 5 ) fm = c(1,1,1,5) else fm = rep(1,narea)
+            if( i == 5 ) fm = c(1,1,6,1) else fm = rep(1,narea)
             S          = diag(exp(-m/nseas-fm*fk*sel[j,]))
             AGS[i,ii,j,,] = G[ii,,] %*% S
         }        
@@ -76,70 +73,123 @@ Nijk    <- array(0,mdims)
 
 # initial states
 i = 1
+AT = array(1,c(nages,narea,narea))
+NT = array(0,c(nages,narea))
 for (j in 1:nages) 
 {
-    for (ii in 1:nseas)
+    for (ii in 1:nseas) 
     {
-        if( j==1 && ii == 1)
-        {
-            Nijk[i,ii,j,]=rj
-        }
-        if( j<nages && ii != nseas)
-        {
-            Nijk[i,ii+1,j,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
-        }
-        else if( j<nages && ii==nseas)
-        {
-            Nijk[i,1,j+1,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]   
-        }
-        # plus group
-        if( j==nages && ii != nseas)
-        {
-            Nijk[i,ii+1,j,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
-        }
-        if( j==nages && ii == nseas)
-        {
-            # cat("Hellow \n")
-            AT = AGS[i,1,j,,]*AGS[i,2,j,,]*AGS[i,3,j,,]*AGS[i,4,j,,]
-            Nijk[i,ii,j,] = -solve(AT-I,Nijk[i,ii,j,])
-            # cat(Nijk[i,ii,j,],"\n")
-        }
-    }    
+        AT[j,,] = AT[j,,] * AGS[i,ii,j,,]
+    }
 }
 
-# update state variables
+for (j in 1:nages) 
+{
+    if( j== 1 )
+    {
+        NT[j,] = rj
+    }
+    if( j< nages )
+    {
+        NT[j+1,] = AT[j,,] %*% NT[j,]        
+    }
+    if( j==nages )
+    {
+        NT[j,] = -solve(AT[j,,]-I,NT[j,])
+    }
+    Nijk[1,1,j,] = NT[j,]
+}
+
 for (i in 1:nyear) 
 {
-    for (ii in 1:nseas)
-    {        
-        for (j in 1:nages) 
+    for (j in 1:nages) 
+    {
+        if(j == 1)
         {
-            if( j==1 && ii == 1 )
-            {
-                Nijk[i,ii,j,]=rj
-            }
-            if( j<nages && i != nyear && ii!=nseas )
-            {
+            Nijk[i,1,j,] = rj
+        }
+        for (ii in 1:nseas) 
+        {
+            if( ii <  nseas && j < nages )
                 Nijk[i,ii+1,j,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
-            }
-            if( j<nages && i != nyear && ii==nseas )
-            {
-                Nijk[i+1,1,j+1,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
-            }
-            # plus group
-            if( j==nages && i != nyear && ii!=nseas )
-            {
-                cat(ii,"\t",Nijk[i,ii,j,],"\n")
+         
+            if( ii == nseas && j < nages )
+                Nijk[i,1,j+1,]  = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
+
+            if( ii <  nseas && j == nages )
                 Nijk[i,ii+1,j,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
-            }
-            if( j==nages && i != nyear && ii==nseas)
-            {
-                cat(ii,"\t",Nijk[i,ii,j,],"\n")
-                Nijk[i+1,1,j,] = Nijk[i+1,ii,j-1,] + AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
-            }
+
+            if( ii == nseas && j == nages )
+                Nijk[i,1,j,] = Nijk[i,1,j,] + AGS[i,ii,j,,] %*% Nijk[i,ii,j,]                
         }
     }
 }
+
+
+# for (j in 1:nages) 
+# {
+#     for (ii in 1:nseas)
+#     {
+#         if( j==1 && ii == 1)
+#         {
+#             Nijk[i,ii,j,]=rj
+#         }
+#         if( j<nages && ii != nseas)
+#         {
+#             Nijk[i,ii+1,j,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
+#         }
+#         else if( j<nages && ii==nseas)
+#         {
+#             Nijk[i,1,j+1,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]   
+#         }
+#         # plus group
+#         if( j==nages && ii != nseas)
+#         {
+#             Nijk[i,ii+1,j,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
+#         }
+#         if( j==nages && ii == nseas)
+#         {
+#             # cat("Hellow \n")
+#             AT = AGS[i,1,j,,]*AGS[i,2,j,,]*AGS[i,3,j,,]*AGS[i,4,j,,]
+#             Nijk[i,ii,j,] = Nijk[i,ii,j,] -solve(AT-I,Nijk[i,ii,j,])
+#             # cat(Nijk[i,ii,j,],"\n")
+#         }
+#     }    
+# }
+
+# # update state variables
+# for (i in 1:nyear) 
+# {
+#     for (ii in 1:nseas)
+#     {        
+#         for (j in 1:nages) 
+#         {
+#             if( j==1 && ii == 1 )
+#             {
+#                 Nijk[i,ii,j,]=rj
+#             }
+#             if( j<nages && i != nyear && ii!=nseas )
+#             {
+#                 Nijk[i,ii+1,j,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
+#             }
+#             if( j<nages && i != nyear && ii==nseas )
+#             {
+#                 Nijk[i+1,1,j+1,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
+#             }
+#             # plus group
+#             if( j==nages && i != nyear && ii!=nseas )
+#             {
+#                 # cat(ii,"\t",Nijk[i,ii,j,],"\n")
+#                 Nijk[i,ii+1,j,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
+#             }
+#             if( j==nages && i != nyear && ii==nseas)
+#             {
+#                 # cat(ii,"\t",Nijk[i,ii,j,],"\n")
+#                 Nijk[i+1,1,j,] = Nijk[i+1,ii,j-1,] + AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
+#             }
+#         }
+#     }
+# }
 
 
 
