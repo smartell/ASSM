@@ -59,7 +59,7 @@ for (i in 1:nyear)
     {
         for (j in 1:nages)
         {
-            if( i == 5 ) fm = c(1,1,6,1) else fm = rep(1,narea)
+            if( i > 5 ) fm = c(1,0,1,0) else fm = rep(1,narea)
             S          = diag(exp(-m/nseas-fm*fk*sel[j,]))
             AGS[i,ii,j,,] = G[ii,,] %*% S
         }        
@@ -68,7 +68,7 @@ for (i in 1:nyear)
 
 
 # POPULATION MODEL
-rj      <- exp(rnorm(narea))        # Average recruitment to area k
+rj      <- exp(2+rnorm(narea))        # Average recruitment to area k
 Nijk    <- array(0,mdims)
 
 # initial states
@@ -126,79 +126,84 @@ for (i in 1:nyear)
 }
 
 
-# for (j in 1:nages) 
-# {
-#     for (ii in 1:nseas)
-#     {
-#         if( j==1 && ii == 1)
-#         {
-#             Nijk[i,ii,j,]=rj
-#         }
-#         if( j<nages && ii != nseas)
-#         {
-#             Nijk[i,ii+1,j,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
-#         }
-#         else if( j<nages && ii==nseas)
-#         {
-#             Nijk[i,1,j+1,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]   
-#         }
-#         # plus group
-#         if( j==nages && ii != nseas)
-#         {
-#             Nijk[i,ii+1,j,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
-#         }
-#         if( j==nages && ii == nseas)
-#         {
-#             # cat("Hellow \n")
-#             AT = AGS[i,1,j,,]*AGS[i,2,j,,]*AGS[i,3,j,,]*AGS[i,4,j,,]
-#             Nijk[i,ii,j,] = Nijk[i,ii,j,] -solve(AT-I,Nijk[i,ii,j,])
-#             # cat(Nijk[i,ii,j,],"\n")
-#         }
-#     }    
-# }
-
-# # update state variables
-# for (i in 1:nyear) 
-# {
-#     for (ii in 1:nseas)
-#     {        
-#         for (j in 1:nages) 
-#         {
-#             if( j==1 && ii == 1 )
-#             {
-#                 Nijk[i,ii,j,]=rj
-#             }
-#             if( j<nages && i != nyear && ii!=nseas )
-#             {
-#                 Nijk[i,ii+1,j,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
-#             }
-#             if( j<nages && i != nyear && ii==nseas )
-#             {
-#                 Nijk[i+1,1,j+1,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
-#             }
-#             # plus group
-#             if( j==nages && i != nyear && ii!=nseas )
-#             {
-#                 # cat(ii,"\t",Nijk[i,ii,j,],"\n")
-#                 Nijk[i,ii+1,j,] = AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
-#             }
-#             if( j==nages && i != nyear && ii==nseas)
-#             {
-#                 # cat(ii,"\t",Nijk[i,ii,j,],"\n")
-#                 Nijk[i+1,1,j,] = Nijk[i+1,ii,j-1,] + AGS[i,ii,j,,] %*% Nijk[i,ii,j,]
-#             }
-#         }
-#     }
-# }
-
-
 
 
 # MARKS RELEASED IN AREA K
-mk      <- rpois(narea,100)
+# This should be done as tag release groups.
+# The definition of a group is number of tags 
+# released in a given stratum (year/season/area).
+# 
+# Data frame for marks released.
+# GRP YR_REL SEAS AREA SIZE 
+#   1   1975    1    1   78 
+# 
+# Data frame for marks recaptured.
+# FISHERY  GRP YR_RECAP SEAS AREA SIZE
+#       1    1     1981    1    3   85
+# 
+# Tk(ngroups,narea,years)   = tags released.
+# Rk(ngroups,fishery,years) = recaptured tags.
+ngroups <- 1
+Mk      <- array(0,c(nyear,nseas,nages,narea))
+F       <- array(0,c(nages,narea))
 
-# MARKS RECAPTURED AT t=1
+for (i in 1:nyear)
+{
+    for (ii in 1:nseas)
+    {
+        for (j in 1:nages) 
+        {
+            F[j,] = fk * sel[j,]
+            size  = ceiling(Nijk[i,ii,j,])
+            Mk[i,ii,j,] = sapply(F[j,],function(x) rbinom(1,size=size,prob=x))
+        }
+    }
+}
+dfT <- NULL
+grp = 0
+siz <- function(a)
+{
+    l = 100*(1-exp(-0.2*a)) 
+    l = l + rnorm(1,0,0.08)*l
+    return(round(l,1))
+} 
+for (i in 1:nyear) 
+for (ii in 1:nseas) 
+{
+    n = colSums(Mk[i,ii,,])
+    for (j in 1:length(n))
+    {
+        if(n[j] > 0)
+        {
+            grp = grp + 1;
+            na = Mk[i,ii,,j]
+            for(age in 1:length(na))
+            {
+                if(na[age] > 0)
+                for (k in 1:na[age])
+                {
+                    dfT=rbind(dfT,data.frame(GRP=grp,YR=i,SEAS=ii,AREA=j,SIZE=siz(age)))
+                }
+            }
+        }
+    }
+}
+
+# MARKS RECAPTURED 
+Rk      <- array(0,c(nyear,nseas,nages,narea))
+
+for (i in 1:nyear)
+{
+    for (j in 1:nages) 
+    {
+        for (ii in 1:nseas)
+        {
+
+        }
+    }
+}
+
 # Rk is a matrix Rk[release_area,recapture_area]
-pk      <- fk * AGS[1,1,1,,] # Capture probability post movement-survival
-Rk      <- apply(pk,1,function(x) rbinom(narea,size=mk,prob=x))
+# pk      <- fk * AGS[1,1,1,,] # Capture probability post movement-survival
+# Rk      <- apply(pk,1,function(x) rbinom(narea,size=mk,prob=x))
 
